@@ -5,6 +5,7 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
 
+import com.code808.calmdesk.domain.auth.service.RefreshTokenService;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -49,6 +50,7 @@ public class CompanyServiceImpl implements CompanyService {
     private final PasswordEncoder passwordEncoder;
     private final NotificationRepository notificationRepository;
     private final NotificationService notificationService;
+    private final RefreshTokenService refreshTokenService;
 
     @Override
     public CompanyDto.CodeResponse generateCode() {
@@ -97,13 +99,16 @@ public class CompanyServiceImpl implements CompanyService {
                 CommonEnums.Status.Y
         );
 
+        long tokenVersion = refreshTokenService.getTokenVersion(email);
+
         // 토큰 재발급
         String token = jwtTokenProvider.generateToken(
                 member.getEmail(),
                 "ADMIN",
                 member.getMemberId(),
                 member.getName(),
-                savedDept.getDepartmentName()
+                savedDept.getDepartmentName(),
+                tokenVersion
         );
 
         return CompanyDto.RegisterResponse.of(savedCompany, member, token);
@@ -154,12 +159,15 @@ public class CompanyServiceImpl implements CompanyService {
                 CommonEnums.Status.N
         );
 
+        long tokenVersion = refreshTokenService.getTokenVersion(email);
+
         String token = jwtTokenProvider.generateToken(
                 member.getEmail(),
                 "EMPLOYEE",
                 member.getMemberId(),
                 member.getName(),
-                department.getDepartmentName()
+                department.getDepartmentName(),
+                tokenVersion
         );
 
         // 관리자에게 입사 신청 알림 전송

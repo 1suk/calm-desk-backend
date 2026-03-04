@@ -16,8 +16,8 @@ public class CorsConfig {
 
         // 허용할 Origin
         config.addAllowedOrigin("http://localhost:5173");
-        config.addAllowedOrigin("https://calmdesk.cloud");
-        config.addAllowedOrigin("https://www.calmdesk.cloud");
+        config.addAllowedOrigin("https://calmdesk.site");
+        config.addAllowedOrigin("https://www.calmdesk.site");
 
         // 허용할 HTTP 메서드
         config.addAllowedMethod("*");

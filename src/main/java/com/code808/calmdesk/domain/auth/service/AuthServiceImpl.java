@@ -62,7 +62,8 @@ public class AuthServiceImpl implements AuthService {
                 "TEMP",
                 savedMember.getMemberId(),
                 savedMember.getName(),
-                null
+                null,
+                0L
         );
         return SignupDto.SignupResponse.of(savedMember, token);
     }
@@ -91,12 +92,15 @@ public class AuthServiceImpl implements AuthService {
         log.info("회사 존재 여부: {}", member.getCompany() != null);
 //        log.info("추출된 CompanyId: {}", companyId);
 
+        long tokenVersion = refreshTokenService.incrementTokenVersion(member.getEmail());
+
         String accessToken = jwtTokenProvider.generateToken(
                 member.getEmail(),
                 role,
                 member.getMemberId(),
                 member.getName(),
-                member.getDepartment() != null ? member.getDepartment().getDepartmentName() : null
+                member.getDepartment() != null ? member.getDepartment().getDepartmentName() : null,
+                tokenVersion
         );
 
         String refreshToken = jwtTokenProvider.generateRefreshToken(
@@ -164,28 +168,27 @@ public class AuthServiceImpl implements AuthService {
         String email = claimsOpt.get().getSubject();
 
         String storedToken = refreshTokenService.get(email);
-        if (storedToken == null) {
+        if (storedToken == null || !storedToken.equals(refreshToken)) {
             throw new TokenNotFoundException("Refresh Token을 찾을 수 없습니다.");
         }
 
         if (!storedToken.equals(refreshToken)) {
-            throw new IllegalArgumentException("Refresh Token이 일치하지 않습니다.");
-        }
-
-        if (jwtTokenProvider.isTokenExpired(refreshToken)) {
             refreshTokenService.delete(email);
-            throw new ExpiredTokenException("만료된 Refresh Token입니다.");
+            throw new IllegalArgumentException("Refresh Token이 일치하지 않습니다.");
         }
 
         Member member = memberRepository.findByEmail(email)
                 .orElseThrow(() -> new RuntimeException("사용자를 찾을 수 없습니다."));
+
+        long tokenVersion = refreshTokenService.incrementTokenVersion(member.getEmail());
 
         String newAccessToken = jwtTokenProvider.generateToken(
                 member.getEmail(),
                 member.getRole().name(),
                 member.getMemberId(),
                 member.getName(),
-                member.getDepartment() != null ? member.getDepartment().getDepartmentName() : null
+                member.getDepartment() != null ? member.getDepartment().getDepartmentName() : null,
+                tokenVersion
         );
 
         return LoginDto.AuthContext.builder()
