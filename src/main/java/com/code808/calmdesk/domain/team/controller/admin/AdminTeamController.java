@@ -114,6 +114,20 @@ public class AdminTeamController {
         return ResponseEntity.ok().build();
     }
 
+    @GetMapping("/members/{memberId}")
+    public ResponseEntity<TeamMemberResponse> getMemberDetails(
+            Principal principal,
+            @PathVariable Long memberId) {
+        Member admin = memberRepository.findEmailWithDetails(principal.getName())
+                .orElseThrow(() -> new IllegalArgumentException("회원을 찾을 수 없습니다."));
+
+        if(admin.getCompany() == null || admin.getCompany().getCompanyId() == null) {
+            return ResponseEntity.notFound().build();
+        }
+
+        return ResponseEntity.ok(teamService.getMemberDetail(memberId, admin.getCompany().getCompanyId()));
+    }
+
     @lombok.Getter
     @lombok.NoArgsConstructor
     @lombok.AllArgsConstructor

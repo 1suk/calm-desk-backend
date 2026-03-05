@@ -198,4 +198,16 @@ public class TeamServiceImpl implements TeamService {
         }
         return new TeamStats(total, danger, caution);
     }
+
+    @Override
+    public TeamMemberResponse getMemberDetail(Long memberId, Long companyId){
+        Member member = memberRepository.findById(memberId)
+                .orElseThrow(() -> new IllegalArgumentException("멤버를 찾을 수 없습니다."));
+
+        if(member.getCompany() == null || !member.getCompany().getCompanyId().equals(companyId)){
+            throw new IllegalArgumentException("해당 멤버에 대한 접근 권한이 없습니다.");
+        }
+
+        return buildTeamMemberResponses(List.of(member)).get(0);
+    }
 }
