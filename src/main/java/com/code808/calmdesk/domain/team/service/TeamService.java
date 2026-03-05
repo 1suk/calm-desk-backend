@@ -35,6 +35,8 @@ public interface TeamService {
     /** 전체 기준 팀 요약 통계 (전체 인원, 위험군 수, 주의 필요 수) */
     TeamStats getTeamStats(Long companyId);
 
+    TeamMemberResponse getMemberDetail(Long memberId, Long companyId);
+
     @Getter
     @AllArgsConstructor
     class TeamStats {
