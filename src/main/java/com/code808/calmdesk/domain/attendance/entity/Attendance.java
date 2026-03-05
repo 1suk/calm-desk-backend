@@ -11,10 +11,9 @@ import java.util.ArrayList;
 import java.util.List;
 
 @Entity
-//@Table(name = "ATTENDANCE", uniqueConstraints = {
-//        @UniqueConstraint(columnNames = {"MEMBER_ID", "WORK_DATE"})
-//})
-@Table(name= "ATTENDANCE")
+@Table(name = "ATTENDANCE", uniqueConstraints = {
+        @UniqueConstraint(columnNames = {"MEMBER_ID", "WORK_DATE"})
+})
 @Getter
 @Setter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
@@ -46,7 +45,7 @@ public class Attendance extends BaseTimeEntity {
     @JoinColumn(name = "MEMBER_ID", nullable = false)
     private Member member;
 
-//    @Builder.Default
+    @Builder.Default
     @OneToMany(mappedBy = "attendance", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<EmotionCheckin> emotionCheckins = new ArrayList<>();
 
