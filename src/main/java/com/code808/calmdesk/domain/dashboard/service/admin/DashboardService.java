@@ -9,6 +9,8 @@ import java.util.List;
 public interface DashboardService {
     List<DashboardDto.DepartmentStats> getDepartmentStats(DashboardDto.DashboardRequest request, LocalDate baseDate, LocalDateTime startOfDay, LocalDateTime endOfDay );
     List<DashboardDto.HighRiskMember> getHighRiskMembers(DashboardDto.DashboardRequest request, LocalDate baseDate);
-    DashboardDto.CompanyStats getCompanyStats(DashboardDto.DashboardRequest request, LocalDate baseDate, Long consultationCount, Long vacationCount);
-    DashboardDto.DashboardResponse getAllStats(DashboardDto.DashboardRequest request);
+    DashboardDto.CompanyStats getCompanyStats(DashboardDto.DashboardRequest request, LocalDate baseDate);
+//    DashboardDto.CompanyStats getCompanyStats(DashboardDto.DashboardRequest request, LocalDate baseDate, Long consultationCount, Long vacationCount);
+    DashboardDto.DashboardResponse getRealtimeStats(DashboardDto.DashboardRequest request);
+    DashboardDto.DashboardResponse getYesterdayStats(DashboardDto.DashboardRequest request);
 }

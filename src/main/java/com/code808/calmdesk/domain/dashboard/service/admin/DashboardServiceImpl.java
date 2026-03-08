@@ -17,12 +17,14 @@ import lombok.extern.slf4j.Slf4j;
 
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.PageRequest;
+import org.springframework.util.StopWatch;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.CompletableFuture;
 
 @Slf4j
 @Service
@@ -70,8 +72,8 @@ public class DashboardServiceImpl implements DashboardService {
                 .toList();
     }
 
-    public DashboardDto.CompanyStats getCompanyStats(DashboardDto.DashboardRequest request, LocalDate baseDate,
-                                                     Long consultationCount, Long vacationCount) {
+    public DashboardDto.CompanyStats getCompanyStats(DashboardDto.DashboardRequest request, LocalDate baseDate
+                                                     ) {
 //                LocalDate baseDate = getBaseDate(request);
 
         CompanyStatsProjection todayStats = dashboardRepository.findCompanyStats(
@@ -80,8 +82,8 @@ public class DashboardServiceImpl implements DashboardService {
         AttendanceRateProjection todayAttendance = dashboardRepository.findAttendanceRate(
                 request.getCompanyId(), baseDate, attendanceStatuses);
 
-//                Long consultationCount = dashboardRepository.countWaitingConsultations(request.getCompanyId());
-//                Long vacationCount = dashboardRepository.countPendingVacations(request.getCompanyId());
+                Long consultationCount = dashboardRepository.countWaitingConsultations(request.getCompanyId());
+                Long vacationCount = dashboardRepository.countPendingVacations(request.getCompanyId());
 
         return DashboardDto.CompanyStats.of(
                 todayStats.getAvgStressLevel(),
@@ -92,32 +94,126 @@ public class DashboardServiceImpl implements DashboardService {
                 vacationCount);
     }
 
-    public DashboardDto.DashboardResponse getAllStats(DashboardDto.DashboardRequest request) {
+//    public DashboardDto.DashboardResponse getAllStats(DashboardDto.DashboardRequest request) {
+//
+//        LocalDate baseDate = getBaseDate(request);
+//        LocalDate lastDate = attendanceRepository
+//                .findLatestWorkDateBefore(request.getCompanyId(), baseDate)
+//                .orElse(baseDate);
+//
+//        LocalDateTime startOfDay = baseDate.atStartOfDay();
+//        LocalDateTime endOfDay = baseDate.atTime(23, 59, 59);
+//        LocalDateTime startOfLastDay = lastDate.atStartOfDay();
+//        LocalDateTime endOfLastDay = lastDate.atTime(23, 59, 59);
+//
+//        Long consultationCount = dashboardRepository.countWaitingConsultations(request.getCompanyId());
+//        Long vacationCount = dashboardRepository.countPendingVacations(request.getCompanyId());
+//
+//        DashboardDto.CompanyStats companyStats = getCompanyStats(request, baseDate, consultationCount, vacationCount);
+//        DashboardDto.CompanyStats lastCompanyStats = getCompanyStats(request, lastDate, consultationCount, vacationCount);
+//
+//        List<DashboardDto.DepartmentStats> departmentStats = getDepartmentStats(request, baseDate, startOfDay, endOfDay);
+//        List<DashboardDto.DepartmentStats> lastDepartmentStats = getDepartmentStats(request, lastDate, startOfLastDay, endOfLastDay);
+//
+//        List<DashboardDto.HighRiskMember> highRiskMembers = getHighRiskMembers(request, baseDate);
+//
+//        return DashboardDto.DashboardResponse.of(
+//                baseDate, companyStats, lastCompanyStats,
+//                lastDate, departmentStats, lastDepartmentStats, highRiskMembers);
+//    }
+
+//    @Override
+//    public DashboardDto.DashboardResponse getRealtimeStats(DashboardDto.DashboardRequest request) {
+//        LocalDate baseDate = getBaseDate(request);
+//        LocalDateTime startOfDay = baseDate.atStartOfDay();
+//        LocalDateTime endOfDay = baseDate.atTime(23, 59, 59);
+//
+//        Long consultationCount = dashboardRepository.countWaitingConsultations(request.getCompanyId());
+//        Long vacationCount = dashboardRepository.countPendingVacations(request.getCompanyId());
+//
+//        DashboardDto.CompanyStats companyStats = getCompanyStats(request, baseDate, consultationCount, vacationCount);
+//        List<DashboardDto.DepartmentStats> departmentStats = getDepartmentStats(request, baseDate, startOfDay, endOfDay);
+//        List<DashboardDto.HighRiskMember> highRiskMembers = getHighRiskMembers(request, baseDate);
+//
+//        return DashboardDto.DashboardResponse.of(baseDate, companyStats, departmentStats, highRiskMembers);
+//    }
+
+    @Override
+    public DashboardDto.DashboardResponse getRealtimeStats(DashboardDto.DashboardRequest request) {
+        StopWatch stopWatch = new StopWatch();
+        stopWatch.start("parallel");
+
+        LocalDate baseDate = getBaseDate(request);
+        LocalDateTime startOfDay = baseDate.atStartOfDay();
+        LocalDateTime endOfDay = baseDate.atTime(23, 59, 59);
+
+        CompletableFuture<DashboardDto.CompanyStats> companyFuture =
+                CompletableFuture.supplyAsync(() -> getCompanyStats(request, baseDate));
+
+        CompletableFuture<List<DashboardDto.DepartmentStats>> departmentFuture =
+                CompletableFuture.supplyAsync(() -> getDepartmentStats(request, baseDate, startOfDay, endOfDay));
+
+        CompletableFuture<List<DashboardDto.HighRiskMember>> highRiskFuture =
+                CompletableFuture.supplyAsync(() -> getHighRiskMembers(request, baseDate));
+
+        CompletableFuture.allOf(companyFuture, departmentFuture, highRiskFuture).join();
+
+        stopWatch.stop();
+        log.info("StopWatch realtime: {} seconds\n{}", stopWatch.getTotalTimeSeconds(), stopWatch.prettyPrint());
+
+        return DashboardDto.DashboardResponse.of(
+                baseDate,
+                companyFuture.join(),
+                departmentFuture.join(),
+                highRiskFuture.join());
+    }
+
+//    @Override
+//    public DashboardDto.DashboardResponse getYesterdayStats(DashboardDto.DashboardRequest request) {
+//        LocalDate baseDate = getBaseDate(request);
+//        LocalDate lastDate = attendanceRepository
+//                .findLatestWorkDateBefore(request.getCompanyId(), baseDate)
+//                .orElse(baseDate.minusDays(1));
+//
+//        LocalDateTime startOfLastDay = lastDate.atStartOfDay();
+//        LocalDateTime endOfLastDay = lastDate.atTime(23, 59, 59);
+//
+//        Long consultationCount = dashboardRepository.countWaitingConsultations(request.getCompanyId());
+//        Long vacationCount = dashboardRepository.countPendingVacations(request.getCompanyId());
+//
+//        DashboardDto.CompanyStats lastCompanyStats = getCompanyStats(request, lastDate);
+//        List<DashboardDto.DepartmentStats> lastDepartmentStats = getDepartmentStats(request, lastDate, startOfLastDay, endOfLastDay);
+//
+//        return DashboardDto.DashboardResponse.of(lastDate, lastCompanyStats, lastDepartmentStats, null);
+//    }
+
+    @Override
+    public DashboardDto.DashboardResponse getYesterdayStats(DashboardDto.DashboardRequest request) {
+        StopWatch stopWatch = new StopWatch();
+        stopWatch.start("yesterday");
 
         LocalDate baseDate = getBaseDate(request);
         LocalDate lastDate = attendanceRepository
                 .findLatestWorkDateBefore(request.getCompanyId(), baseDate)
-                .orElse(baseDate);
-
-        LocalDateTime startOfDay = baseDate.atStartOfDay();
-        LocalDateTime endOfDay = baseDate.atTime(23, 59, 59);
+                .orElse(baseDate.minusDays(1));
         LocalDateTime startOfLastDay = lastDate.atStartOfDay();
         LocalDateTime endOfLastDay = lastDate.atTime(23, 59, 59);
 
-        Long consultationCount = dashboardRepository.countWaitingConsultations(request.getCompanyId());
-        Long vacationCount = dashboardRepository.countPendingVacations(request.getCompanyId());
+        CompletableFuture<DashboardDto.CompanyStats> companyFuture =
+                CompletableFuture.supplyAsync(() -> getCompanyStats(request, lastDate));
 
-        DashboardDto.CompanyStats companyStats = getCompanyStats(request, baseDate, consultationCount, vacationCount);
-        DashboardDto.CompanyStats lastCompanyStats = getCompanyStats(request, lastDate, consultationCount, vacationCount);
+        CompletableFuture<List<DashboardDto.DepartmentStats>> departmentFuture =
+                CompletableFuture.supplyAsync(() -> getDepartmentStats(request, lastDate, startOfLastDay, endOfLastDay));
 
-        List<DashboardDto.DepartmentStats> departmentStats = getDepartmentStats(request, baseDate, startOfDay, endOfDay);
-        List<DashboardDto.DepartmentStats> lastDepartmentStats = getDepartmentStats(request, lastDate, startOfLastDay, endOfLastDay);
+        CompletableFuture.allOf(companyFuture, departmentFuture).join();
 
-        List<DashboardDto.HighRiskMember> highRiskMembers = getHighRiskMembers(request, baseDate);
+        stopWatch.stop();
+        log.info("StopWatch yesterday: {} seconds\n{}", stopWatch.getTotalTimeSeconds(), stopWatch.prettyPrint());
 
         return DashboardDto.DashboardResponse.of(
-                baseDate, companyStats, lastCompanyStats,
-                lastDate, departmentStats, lastDepartmentStats, highRiskMembers);
+                lastDate,
+                companyFuture.join(),
+                departmentFuture.join(),
+                null);
     }
-
 }

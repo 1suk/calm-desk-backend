@@ -27,7 +27,7 @@ public class DashboardEventListener {
         try {
             DashboardDto.DashboardRequest request = new DashboardDto.DashboardRequest();
             request.setCompanyId(companyId);
-            DashboardDto.DashboardResponse stats = dashboardService.getAllStats(request);
+            DashboardDto.DashboardResponse stats = dashboardService.getRealtimeStats(request);
             sseEmitterRegistry.sendToCompany(companyId, "dashboard", stats);
             log.info("대시보드 push 완료 - companyId: {}", companyId);
         } catch (Exception e) {

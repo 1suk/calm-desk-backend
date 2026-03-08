@@ -164,28 +164,51 @@ public class DashboardDto {
     public static class DashboardResponse {
         private LocalDate date;
         private CompanyStats companyStats;
-        private CompanyStats lastCompanyStats;
-        private LocalDate lastDate;
         private List<DepartmentStats> departmentStats;
-        private List<DepartmentStats> lastDepartmentStats;
         private List<HighRiskMember> highRiskMembers;
+
         public static DashboardResponse of(LocalDate date,
-                                           CompanyStats companyStats, CompanyStats lastCompanyStats,
-                                           LocalDate lastDate,
+                                           CompanyStats companyStats,
                                            List<DepartmentStats> departmentStats,
-                                           List<DepartmentStats> lastDepartmentStats,
                                            List<HighRiskMember> highRiskMembers) {
             return DashboardResponse.builder()
                     .date(date)
                     .companyStats(companyStats)
-                    .lastCompanyStats(lastCompanyStats)
-                    .lastDate(lastDate)
                     .departmentStats(departmentStats)
-                    .lastDepartmentStats(lastDepartmentStats)
                     .highRiskMembers(highRiskMembers)
                     .build();
         }
     }
+
+//    @Getter
+//    @AllArgsConstructor
+//    @NoArgsConstructor
+//    @Builder
+//    public static class DashboardResponse {
+//        private LocalDate date;
+//        private CompanyStats companyStats;
+//        private CompanyStats lastCompanyStats;
+//        private LocalDate lastDate;
+//        private List<DepartmentStats> departmentStats;
+//        private List<DepartmentStats> lastDepartmentStats;
+//        private List<HighRiskMember> highRiskMembers;
+//        public static DashboardResponse of(LocalDate date,
+//                                           CompanyStats companyStats, CompanyStats lastCompanyStats,
+//                                           LocalDate lastDate,
+//                                           List<DepartmentStats> departmentStats,
+//                                           List<DepartmentStats> lastDepartmentStats,
+//                                           List<HighRiskMember> highRiskMembers) {
+//            return DashboardResponse.builder()
+//                    .date(date)
+//                    .companyStats(companyStats)
+//                    .lastCompanyStats(lastCompanyStats)
+//                    .lastDate(lastDate)
+//                    .departmentStats(departmentStats)
+//                    .lastDepartmentStats(lastDepartmentStats)
+//                    .highRiskMembers(highRiskMembers)
+//                    .build();
+//        }
+//    }
 
 //    @Getter
 //    @NoArgsConstructor
