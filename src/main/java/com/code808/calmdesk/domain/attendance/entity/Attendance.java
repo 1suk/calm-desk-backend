@@ -11,9 +11,14 @@ import java.util.ArrayList;
 import java.util.List;
 
 @Entity
-@Table(name = "ATTENDANCE", uniqueConstraints = {
-        @UniqueConstraint(columnNames = {"MEMBER_ID", "WORK_DATE"})
-})
+@Table(name = "ATTENDANCE",
+        uniqueConstraints = {
+                @UniqueConstraint(columnNames = {"MEMBER_ID", "WORK_DATE"})
+        },
+        indexes = {
+                @Index(name = "idx_attendance_work_date", columnList = "WORK_DATE")
+        }
+)
 @Getter
 @Setter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)

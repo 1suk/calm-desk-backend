@@ -6,6 +6,7 @@ import com.code808.calmdesk.domain.dashboard.repository.admin.projection.Departm
 import com.code808.calmdesk.domain.dashboard.repository.admin.projection.CompanyStatsProjection;
 import com.code808.calmdesk.domain.dashboard.repository.admin.projection.AttendanceRateProjection;
 
+import com.code808.calmdesk.domain.dashboard.repository.admin.projection.HighRiskMemberProjection;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -40,20 +41,40 @@ public interface DashboardRepository extends JpaRepository<StressSummary, Long> 
                         @Param("startDate") LocalDateTime startDate,
                         @Param("endDate") LocalDateTime endDate);
 
-        @Query("SELECT s FROM StressSummary s " +
-                        "JOIN FETCH s.member m " +
-                        "JOIN FETCH s.department d " +
-                        "WHERE m.company.companyId = :companyId " +
-                        "AND s.summaryDate = :date " +
-                        "AND s.avgStressLevel >= :threshold " +
-                        "ORDER BY s.avgStressLevel DESC")
-        List<StressSummary> findHighRiskMembers(
-                        @Param("companyId") Long companyId,
-                        @Param("date") LocalDate date,
-                        @Param("threshold") Integer threshold,
-                        Pageable pageable);
+//        @Query("SELECT s FROM StressSummary s " +
+//                        "JOIN FETCH s.member m " +
+//                        "JOIN FETCH s.department d " +
+//                        "WHERE m.company.companyId = :companyId " +
+//                        "AND s.summaryDate = :date " +
+//                        "AND s.avgStressLevel >= :threshold " +
+//                        "ORDER BY s.avgStressLevel DESC")
+//        List<StressSummary> findHighRiskMembers(
+//                        @Param("companyId") Long companyId,
+//                        @Param("date") LocalDate date,
+//                        @Param("threshold") Integer threshold,
+//                        Pageable pageable);
 
-        @Query("SELECT AVG(s.avgStressLevel) " +
+    @Query("SELECT " +
+            "m.memberId as memberId, " +
+            "m.name as memberName, " +
+            "d.departmentName as departmentName, " +
+            "s.avgStressLevel as avgStressLevel " +
+            "FROM StressSummary s " +
+            "JOIN s.member m " +
+            "JOIN s.department d " +
+            "WHERE m.company.companyId = :companyId " +
+            "AND s.summaryDate = :date " +
+            "AND s.avgStressLevel >= :threshold " +
+            "ORDER BY s.avgStressLevel DESC")
+    List<HighRiskMemberProjection> findHighRiskMembers(
+            @Param("companyId") Long companyId,
+            @Param("date") LocalDate date,
+            @Param("threshold") Integer threshold,
+            Pageable pageable
+    );
+
+
+    @Query("SELECT AVG(s.avgStressLevel) " +
                         "FROM StressSummary s " +
                         "JOIN s.member m " +
                         "WHERE m.company.companyId = :companyId " +

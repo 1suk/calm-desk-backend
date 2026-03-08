@@ -8,6 +8,7 @@ import com.code808.calmdesk.domain.dashboard.repository.admin.DashboardRepositor
 import com.code808.calmdesk.domain.dashboard.repository.admin.projection.AttendanceRateProjection;
 import com.code808.calmdesk.domain.dashboard.repository.admin.projection.CompanyStatsProjection;
 import com.code808.calmdesk.domain.dashboard.repository.admin.projection.DepartmentStatsProjection;
+import com.code808.calmdesk.domain.dashboard.repository.admin.projection.HighRiskMemberProjection;
 import org.springframework.stereotype.Service;
 
 import org.springframework.transaction.annotation.Transactional;
@@ -41,87 +42,82 @@ public class DashboardServiceImpl implements DashboardService {
                                 .orElseGet(LocalDate::now);
         }
 
-        public List<DashboardDto.DepartmentStats> getDepartmentStats(DashboardDto.DashboardRequest request) {
-                LocalDate baseDate = getBaseDate(request);
-                LocalDateTime startOfDay = baseDate.atStartOfDay();
-                LocalDateTime endOfDay = baseDate.atTime(23, 59, 59);
+    public List<DashboardDto.DepartmentStats> getDepartmentStats(
+            DashboardDto.DashboardRequest request, LocalDate baseDate,
+            LocalDateTime startOfDay, LocalDateTime endOfDay) {
 
-                List<DepartmentStatsProjection> projections = dashboardRepository
-                                .findDepartmentStats(request.getCompanyId(), baseDate, startOfDay, endOfDay);
+        List<DepartmentStatsProjection> projections = dashboardRepository
+                .findDepartmentStats(request.getCompanyId(), baseDate, startOfDay, endOfDay);
 
-                Long totalCoolDown = dashboardRepository.testCoolDownCount(
-                                request.getCompanyId(), startOfDay, endOfDay);
+        return projections.stream()
+                .map(DashboardDto.DepartmentStats::of)
+                .toList();
+    }
 
-                return projections.stream()
-                                .map(DashboardDto.DepartmentStats::of)
-                                .toList();
-        }
+    public List<DashboardDto.HighRiskMember> getHighRiskMembers(
+            DashboardDto.DashboardRequest request, LocalDate baseDate) {
 
-        public List<DashboardDto.HighRiskMember> getHighRiskMembers(DashboardDto.DashboardRequest request) {
-                Pageable top5 = PageRequest.of(0, 5);
-                LocalDate baseDate = getBaseDate(request);
-                List<StressSummary> highRiskMembers = dashboardRepository.findHighRiskMembers(
-                                request.getCompanyId(),
-                                baseDate,
-                                request.getThreshold(),
-                                top5);
-                return highRiskMembers.stream()
-                                .map(DashboardDto.HighRiskMember::of)
-                                .toList();
-        }
+        Pageable top5 = PageRequest.of(0, 5);
 
-        public DashboardDto.CompanyStats getCompanyStats(DashboardDto.DashboardRequest request) {
-                LocalDate baseDate = getBaseDate(request);
+        List<HighRiskMemberProjection> highRiskMembers = dashboardRepository.findHighRiskMembers(
+                request.getCompanyId(),
+                baseDate,
+                request.getThreshold(),
+                top5);
 
-                CompanyStatsProjection todayStats = dashboardRepository.findCompanyStats(
-                                request.getCompanyId(), baseDate, request.getThreshold());
+        return highRiskMembers.stream()
+                .map(DashboardDto.HighRiskMember::of)
+                .toList();
+    }
 
-                AttendanceRateProjection todayAttendance = dashboardRepository.findAttendanceRate(
-                                request.getCompanyId(), baseDate, attendanceStatuses);
+    public DashboardDto.CompanyStats getCompanyStats(DashboardDto.DashboardRequest request, LocalDate baseDate,
+                                                     Long consultationCount, Long vacationCount) {
+//                LocalDate baseDate = getBaseDate(request);
 
-                Long consultationCount = dashboardRepository.countWaitingConsultations(request.getCompanyId());
-                Long vacationCount = dashboardRepository.countPendingVacations(request.getCompanyId());
+        CompanyStatsProjection todayStats = dashboardRepository.findCompanyStats(
+                request.getCompanyId(), baseDate, request.getThreshold());
 
-                return DashboardDto.CompanyStats.of(
-                                todayStats.getAvgStressLevel(),
-                                todayStats.getTotalMembers(),
-                                todayStats.getHighRiskCount(),
-                                (todayAttendance != null) ? todayAttendance.getAttendanceRate() : 0.0,
-                                consultationCount,
-                                vacationCount);
-        }
+        AttendanceRateProjection todayAttendance = dashboardRepository.findAttendanceRate(
+                request.getCompanyId(), baseDate, attendanceStatuses);
 
-//    public DashboardDto.YesterdayStats getYesterdayStats(DashboardDto.DashboardRequest request) {
-//        LocalDate yesterday = LocalDate.now().minusDays(1);
-//
-//        Double yesterdayAvg = dashboardRepository.findCompanyAvgStress(
-//                request.getCompanyId(), yesterday);
-//
-//        AttendanceRateProjection yesterdayAttendance = dashboardRepository.findAttendanceRate(
-//                request.getCompanyId(), yesterday, attendanceStatuses);
-//
-//        return DashboardDto.YesterdayStats.of(
-//                yesterday,
-//                yesterdayAvg,
-//                (yesterdayAttendance != null) ? yesterdayAttendance.getAttendanceRate() : 0.0);
-//    }
+//                Long consultationCount = dashboardRepository.countWaitingConsultations(request.getCompanyId());
+//                Long vacationCount = dashboardRepository.countPendingVacations(request.getCompanyId());
 
-        public DashboardDto.DashboardResponse getAllStats(DashboardDto.DashboardRequest request) {
-                DashboardDto.CompanyStats companyStats = getCompanyStats(request);
-                List<DashboardDto.DepartmentStats> departmentStats = getDepartmentStats(request);
-                List<DashboardDto.HighRiskMember> highRiskMembers = getHighRiskMembers(request);
+        return DashboardDto.CompanyStats.of(
+                todayStats.getAvgStressLevel(),
+                todayStats.getTotalMembers(),
+                todayStats.getHighRiskCount(),
+                (todayAttendance != null) ? todayAttendance.getAttendanceRate() : 0.0,
+                consultationCount,
+                vacationCount);
+    }
 
-            log.info("==== [대시보드 조회 시작] ====");
-            log.info("1. 요청된 날짜(Request Date): {}", request.getDate());
-            log.info("3. 회사 ID: {}", request.getCompanyId());
-            log.info("4. 위험군 임계치(Threshold): {}", request.getThreshold());
-            log.info("=============================");
+    public DashboardDto.DashboardResponse getAllStats(DashboardDto.DashboardRequest request) {
 
-                return DashboardDto.DashboardResponse.of(
-                                request.getDate(),
-                                companyStats,
-                                departmentStats,
-                                highRiskMembers);
-        }
+        LocalDate baseDate = getBaseDate(request);
+        LocalDate lastDate = attendanceRepository
+                .findLatestWorkDateBefore(request.getCompanyId(), baseDate)
+                .orElse(baseDate);
+
+        LocalDateTime startOfDay = baseDate.atStartOfDay();
+        LocalDateTime endOfDay = baseDate.atTime(23, 59, 59);
+        LocalDateTime startOfLastDay = lastDate.atStartOfDay();
+        LocalDateTime endOfLastDay = lastDate.atTime(23, 59, 59);
+
+        Long consultationCount = dashboardRepository.countWaitingConsultations(request.getCompanyId());
+        Long vacationCount = dashboardRepository.countPendingVacations(request.getCompanyId());
+
+        DashboardDto.CompanyStats companyStats = getCompanyStats(request, baseDate, consultationCount, vacationCount);
+        DashboardDto.CompanyStats lastCompanyStats = getCompanyStats(request, lastDate, consultationCount, vacationCount);
+
+        List<DashboardDto.DepartmentStats> departmentStats = getDepartmentStats(request, baseDate, startOfDay, endOfDay);
+        List<DashboardDto.DepartmentStats> lastDepartmentStats = getDepartmentStats(request, lastDate, startOfLastDay, endOfLastDay);
+
+        List<DashboardDto.HighRiskMember> highRiskMembers = getHighRiskMembers(request, baseDate);
+
+        return DashboardDto.DashboardResponse.of(
+                baseDate, companyStats, lastCompanyStats,
+                lastDate, departmentStats, lastDepartmentStats, highRiskMembers);
+    }
 
 }

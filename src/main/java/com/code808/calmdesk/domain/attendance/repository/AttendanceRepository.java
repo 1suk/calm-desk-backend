@@ -33,4 +33,7 @@ public interface AttendanceRepository extends JpaRepository<Attendance, Long> {
 
     @Query("SELECT MAX(a.workDate) FROM Attendance a WHERE a.member.company.companyId = :companyId")
     Optional<LocalDate> findLatestWorkDate(@Param("companyId") Long companyId);
+
+    @Query("SELECT MAX(a.workDate) FROM Attendance a WHERE a.member.company.companyId = :companyId AND a.workDate < :baseDate")
+    Optional<LocalDate> findLatestWorkDateBefore(@Param("companyId") Long companyId, @Param("baseDate") LocalDate baseDate);
 }
