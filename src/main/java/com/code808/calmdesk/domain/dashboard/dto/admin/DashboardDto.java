@@ -2,6 +2,7 @@ package com.code808.calmdesk.domain.dashboard.dto.admin;
 
 import com.code808.calmdesk.domain.attendance.entity.StressSummary;
 import com.code808.calmdesk.domain.dashboard.repository.admin.projection.DepartmentStatsProjection;
+import com.code808.calmdesk.domain.dashboard.repository.admin.projection.HighRiskMemberProjection;
 import lombok.*;
 import org.springframework.format.annotation.DateTimeFormat;
 
@@ -103,7 +104,7 @@ public class DashboardDto {
         private String departmentName;
         private Double stressLevel;
         private Double stressPercentage;
-        private LocalDate summaryDate;
+//        private LocalDate summaryDate;
 
         public static HighRiskMember of(StressSummary summary) {
             Double stress = summary.getAvgStressLevel();
@@ -115,7 +116,7 @@ public class DashboardDto {
                     .departmentName(summary.getDepartment().getDepartmentName())
                     .stressLevel(stress)
                     .stressPercentage(stressPct)
-                    .summaryDate(summary.getSummaryDate())
+//                    .summaryDate(summary.getSummaryDate())
                     .build();
         }
 
@@ -123,6 +124,19 @@ public class DashboardDto {
             return summaries.stream()
                     .map(HighRiskMember::of)
                     .toList();
+        }
+
+        public static HighRiskMember of(HighRiskMemberProjection p) {
+            Double stress = p.getAvgStressLevel();
+            Double stressPct = (stress != null) ? (double) convertScore(stress) : 0.0;
+
+            return HighRiskMember.builder()
+                    .memberId(p.getMemberId())
+                    .memberName(p.getMemberName())
+                    .departmentName(p.getDepartmentName())
+                    .stressLevel(stress)
+                    .stressPercentage(stressPct)
+                    .build();
         }
     }
 
@@ -152,6 +166,7 @@ public class DashboardDto {
         private CompanyStats companyStats;
         private List<DepartmentStats> departmentStats;
         private List<HighRiskMember> highRiskMembers;
+
         public static DashboardResponse of(LocalDate date,
                                            CompanyStats companyStats,
                                            List<DepartmentStats> departmentStats,
@@ -164,6 +179,36 @@ public class DashboardDto {
                     .build();
         }
     }
+
+//    @Getter
+//    @AllArgsConstructor
+//    @NoArgsConstructor
+//    @Builder
+//    public static class DashboardResponse {
+//        private LocalDate date;
+//        private CompanyStats companyStats;
+//        private CompanyStats lastCompanyStats;
+//        private LocalDate lastDate;
+//        private List<DepartmentStats> departmentStats;
+//        private List<DepartmentStats> lastDepartmentStats;
+//        private List<HighRiskMember> highRiskMembers;
+//        public static DashboardResponse of(LocalDate date,
+//                                           CompanyStats companyStats, CompanyStats lastCompanyStats,
+//                                           LocalDate lastDate,
+//                                           List<DepartmentStats> departmentStats,
+//                                           List<DepartmentStats> lastDepartmentStats,
+//                                           List<HighRiskMember> highRiskMembers) {
+//            return DashboardResponse.builder()
+//                    .date(date)
+//                    .companyStats(companyStats)
+//                    .lastCompanyStats(lastCompanyStats)
+//                    .lastDate(lastDate)
+//                    .departmentStats(departmentStats)
+//                    .lastDepartmentStats(lastDepartmentStats)
+//                    .highRiskMembers(highRiskMembers)
+//                    .build();
+//        }
+//    }
 
 //    @Getter
 //    @NoArgsConstructor

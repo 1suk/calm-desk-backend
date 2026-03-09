@@ -49,7 +49,7 @@ public class DashboardController {
             @Valid @RequestBody @ModelAttribute DashboardDto.DashboardRequest request,
             Principal principal) {
         setCompanyId(request, principal);
-        return ResponseEntity.ok(dashboardService.getAllStats(request));
+        return ResponseEntity.ok(dashboardService.getRealtimeStats(request));
     }
 
     private void setCompanyId(DashboardDto.DashboardRequest request, Principal principal) {
@@ -64,8 +64,7 @@ public class DashboardController {
             @Valid @ModelAttribute DashboardDto.DashboardRequest request,
             Principal principal) {
         setCompanyId(request, principal);
-        request.setDate(LocalDate.now().minusDays(1));
-        return ResponseEntity.ok(dashboardService.getAllStats(request));
+        return ResponseEntity.ok(dashboardService.getYesterdayStats(request));
     }
 
     @Operation(summary = "SSE 구독", description = "실시간 대시보드 업데이트를 위한 SSE(Server-Sent Events)를 구독합니다.")

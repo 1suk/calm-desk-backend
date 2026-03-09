@@ -10,7 +10,11 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 
 @Entity
-@Table(name = "STRESS_SUMMARY")
+@Table(name = "STRESS_SUMMARY", indexes = {
+        @Index(name = "idx_stress_summary_dept_date", columnList = "department_id, summary_date"),
+        @Index(name = "idx_stress_summary_member_date", columnList = "member_id, summary_date")
+//        @Index(name = "idx_stress_summary_date", columnList = "summary_date")
+})
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 @AllArgsConstructor
