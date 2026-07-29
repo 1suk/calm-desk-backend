@@ -18,7 +18,7 @@ public interface VacationRepository extends JpaRepository<Vacation, Long> {
 
     /** 해당 기간과 겹치는 휴가 조회 (기간 겹침 조건) */
     @Query("SELECT v FROM Vacation v WHERE v.requestMember.memberId = :memberId " +
-           "AND v.endDate >= :rangeStart AND v.startDate < :rangeEnd")
+            "AND v.endDate >= :rangeStart AND v.startDate < :rangeEnd")
     List<Vacation> findByRequestMemberAndDateOverlap(@Param("memberId") Long memberId,
                                                      @Param("rangeStart") LocalDateTime rangeStart,
                                                      @Param("rangeEnd") LocalDateTime rangeEnd);

@@ -6,6 +6,7 @@ import com.code808.calmdesk.domain.attendance.event.DashboardEvent;
 import com.code808.calmdesk.domain.attendance.repository.StressSummaryRepository;
 import com.code808.calmdesk.domain.attendance.repository.EmotionCheckinRepository;
 import com.code808.calmdesk.domain.company.entity.Department;
+import com.code808.calmdesk.domain.attendance.event.StressDeltaEvent;
 import com.code808.calmdesk.domain.member.entity.Member;
 import com.code808.calmdesk.domain.member.repository.MemberRepository;
 
@@ -50,9 +51,11 @@ public class StressSummaryServiceImpl implements StressSummaryService {
                 .findByMember_MemberIdAndSummaryDate(memberId, summaryDate);
 
         StressSummary savedSummary;
+        Double oldAvg = null;
 
         if (existingSummary.isPresent()) {
             StressSummary summary = existingSummary.get();
+            oldAvg = summary.getAvgStressLevel();
             summary.updateStressData(avgStressLevel, checkinCount);
             savedSummary = summary;
         } else {
@@ -63,12 +66,25 @@ public class StressSummaryServiceImpl implements StressSummaryService {
                     .avgStressLevel(avgStressLevel)
                     .checkinCount(checkinCount)
                     .build();
+
             savedSummary = stressSummaryRepository.save(newSummary);
         }
 
         Long companyId = member.getCompany().getCompanyId();
+
         eventPublisher.publishEvent(
                 new DashboardEvent(companyId)
+        );
+
+        eventPublisher.publishEvent(
+                new StressDeltaEvent(
+                        companyId,
+                        department.getDepartmentId(),
+                        memberId,
+                        summaryDate,
+                        oldAvg,
+                        savedSummary.getAvgStressLevel()
+                )
         );
 
         return StressDto.SummaryResponse.builder()
