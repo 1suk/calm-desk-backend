@@ -1,0 +1,22 @@
+ public DashboardDto.DashboardResponse getAllStats(DashboardDto.DashboardRequest request) {
+            StopWatch stopWatch = new StopWatch();
+
+            stopWatch.start("companyStats");
+            DashboardDto.CompanyStats companyStats = getCompanyStats(request);
+            stopWatch.stop();
+
+            stopWatch.start("departmentStats");
+            List<DashboardDto.DepartmentStats> departmentStats = getDepartmentStats(request);
+            stopWatch.stop();
+
+            stopWatch.start("highRiskMembers");
+            List<DashboardDto.HighRiskMember> highRiskMembers = getHighRiskMembers(request);
+            stopWatch.stop();
+
+            log.info("StopWatch '': {} seconds\n{}", stopWatch.getTotalTimeSeconds(), stopWatch.prettyPrint());
+                return DashboardDto.DashboardResponse.of(
+                                request.getDate(),
+                                companyStats,
+                                departmentStats,
+                                highRiskMembers);
+        }
