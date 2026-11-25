@@ -17,7 +17,6 @@ import lombok.extern.slf4j.Slf4j;
 
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.PageRequest;
-import org.springframework.util.StopWatch;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -31,18 +30,18 @@ import java.util.concurrent.CompletableFuture;
 @RequiredArgsConstructor
 @Transactional(readOnly = true)
 public class DashboardServiceImpl implements DashboardService {
-        private final DashboardRepository dashboardRepository;
-        private final AttendanceRepository attendanceRepository;
+    private final DashboardRepository dashboardRepository;
+    private final AttendanceRepository attendanceRepository;
 
-        private static final List<Attendance.AttendanceStatus> attendanceStatuses = Arrays.asList(
-                Attendance.AttendanceStatus.ATTEND,
-                Attendance.AttendanceStatus.LATE);
+    private static final List<Attendance.AttendanceStatus> attendanceStatuses = Arrays.asList(
+            Attendance.AttendanceStatus.ATTEND,
+            Attendance.AttendanceStatus.LATE);
 
-        private LocalDate getBaseDate(DashboardDto.DashboardRequest request) {
-                return Optional.ofNullable(request.getDate())
-                                .or(() -> attendanceRepository.findLatestWorkDate(request.getCompanyId()))
-                                .orElseGet(LocalDate::now);
-        }
+    private LocalDate getBaseDate(DashboardDto.DashboardRequest request) {
+        return Optional.ofNullable(request.getDate())
+                .or(() -> attendanceRepository.findLatestWorkDate(request.getCompanyId()))
+                .orElseGet(LocalDate::now);
+    }
 
     public List<DashboardDto.DepartmentStats> getDepartmentStats(
             DashboardDto.DashboardRequest request, LocalDate baseDate,
@@ -73,7 +72,7 @@ public class DashboardServiceImpl implements DashboardService {
     }
 
     public DashboardDto.CompanyStats getCompanyStats(DashboardDto.DashboardRequest request, LocalDate baseDate
-                                                     ) {
+    ) {
 //                LocalDate baseDate = getBaseDate(request);
 
         CompanyStatsProjection todayStats = dashboardRepository.findCompanyStats(
@@ -82,8 +81,8 @@ public class DashboardServiceImpl implements DashboardService {
         AttendanceRateProjection todayAttendance = dashboardRepository.findAttendanceRate(
                 request.getCompanyId(), baseDate, attendanceStatuses);
 
-                Long consultationCount = dashboardRepository.countWaitingConsultations(request.getCompanyId());
-                Long vacationCount = dashboardRepository.countPendingVacations(request.getCompanyId());
+        Long consultationCount = dashboardRepository.countWaitingConsultations(request.getCompanyId());
+        Long vacationCount = dashboardRepository.countPendingVacations(request.getCompanyId());
 
         return DashboardDto.CompanyStats.of(
                 todayStats.getAvgStressLevel(),
@@ -140,9 +139,6 @@ public class DashboardServiceImpl implements DashboardService {
 
     @Override
     public DashboardDto.DashboardResponse getRealtimeStats(DashboardDto.DashboardRequest request) {
-        StopWatch stopWatch = new StopWatch();
-        stopWatch.start("parallel");
-
         LocalDate baseDate = getBaseDate(request);
         LocalDateTime startOfDay = baseDate.atStartOfDay();
         LocalDateTime endOfDay = baseDate.atTime(23, 59, 59);
@@ -157,9 +153,6 @@ public class DashboardServiceImpl implements DashboardService {
                 CompletableFuture.supplyAsync(() -> getHighRiskMembers(request, baseDate));
 
         CompletableFuture.allOf(companyFuture, departmentFuture, highRiskFuture).join();
-
-        stopWatch.stop();
-        log.info("StopWatch realtime: {} seconds\n{}", stopWatch.getTotalTimeSeconds(), stopWatch.prettyPrint());
 
         return DashboardDto.DashboardResponse.of(
                 baseDate,
@@ -189,9 +182,6 @@ public class DashboardServiceImpl implements DashboardService {
 
     @Override
     public DashboardDto.DashboardResponse getYesterdayStats(DashboardDto.DashboardRequest request) {
-        StopWatch stopWatch = new StopWatch();
-        stopWatch.start("yesterday");
-
         LocalDate baseDate = getBaseDate(request);
         LocalDate lastDate = attendanceRepository
                 .findLatestWorkDateBefore(request.getCompanyId(), baseDate)
@@ -206,9 +196,6 @@ public class DashboardServiceImpl implements DashboardService {
                 CompletableFuture.supplyAsync(() -> getDepartmentStats(request, lastDate, startOfLastDay, endOfLastDay));
 
         CompletableFuture.allOf(companyFuture, departmentFuture).join();
-
-        stopWatch.stop();
-        log.info("StopWatch yesterday: {} seconds\n{}", stopWatch.getTotalTimeSeconds(), stopWatch.prettyPrint());
 
         return DashboardDto.DashboardResponse.of(
                 lastDate,
