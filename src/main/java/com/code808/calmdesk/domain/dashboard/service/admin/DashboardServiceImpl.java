@@ -2,35 +2,25 @@ package com.code808.calmdesk.domain.dashboard.service.admin;
 
 import com.code808.calmdesk.domain.attendance.entity.Attendance;
 import com.code808.calmdesk.domain.attendance.repository.AttendanceRepository;
-import com.code808.calmdesk.domain.company.entity.Department;
-import com.code808.calmdesk.domain.company.repository.DepartmentRepository;
 import com.code808.calmdesk.domain.dashboard.dto.admin.DashboardDto;
 import com.code808.calmdesk.domain.dashboard.repository.admin.DashboardRepository;
-import com.code808.calmdesk.domain.dashboard.repository.admin.cache.DashboardRedisRepository;
 import com.code808.calmdesk.domain.dashboard.repository.admin.projection.AttendanceRateProjection;
-import com.code808.calmdesk.domain.dashboard.repository.admin.projection.CompanyStatsProjection;
 import com.code808.calmdesk.domain.dashboard.repository.admin.projection.DepartmentCooldownProjection;
-import com.code808.calmdesk.domain.dashboard.repository.admin.projection.DepartmentStatsProjection;
-import com.code808.calmdesk.domain.dashboard.repository.admin.projection.HighRiskMemberProjection;
-import com.code808.calmdesk.domain.dashboard.repository.admin.projection.MemberProjection;
-import org.springframework.data.redis.core.ZSetOperations;
+import com.code808.calmdesk.domain.dashboard.repository.admin.projection.MemberDailyStressProjection;
 import org.springframework.stereotype.Service;
 
 import org.springframework.transaction.annotation.Transactional;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
-import org.springframework.data.domain.Pageable;
-import org.springframework.data.domain.PageRequest;
-
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.Set;
 import java.util.stream.Collectors;
 
 @Slf4j
@@ -40,213 +30,133 @@ import java.util.stream.Collectors;
 public class DashboardServiceImpl implements DashboardService {
     private final DashboardRepository dashboardRepository;
     private final AttendanceRepository attendanceRepository;
-    private final DashboardRedisRepository dashboardRedisRepository;
-    private final DepartmentRepository departmentRepository;
 
     private static final int TOP_HIGH_RISK_LIMIT = 5;
 
     private static final List<Attendance.AttendanceStatus> attendanceStatuses = Arrays.asList(Attendance.AttendanceStatus.ATTEND, Attendance.AttendanceStatus.LATE);
 
     private LocalDate getBaseDate(DashboardDto.DashboardRequest request) {
-        return Optional.ofNullable(request.getDate()).or(() -> attendanceRepository.findLatestWorkDate(request.getCompanyId())).orElseGet(LocalDate::now);
+        return Optional.ofNullable(request.getDate()).orElseGet(LocalDate::now);
     }
 
-    public List<DashboardDto.DepartmentStats> getDepartmentStats(DashboardDto.DashboardRequest request, LocalDate baseDate, LocalDateTime startOfDay, LocalDateTime endOfDay) {
+    private List<MemberDailyStressProjection> memberStress(Long companyId, LocalDate date) {
+        return dashboardRepository.findMemberDailyStress(companyId, date);
+    }
 
+    // ---- 앱에서 롤업 (멤버 단위 결과 하나로 회사/부서/고위험군 계산) ----
+
+    private DashboardDto.CompanyStats companyStats(DashboardDto.DashboardRequest request, LocalDate date, List<MemberDailyStressProjection> members) {
         Long companyId = request.getCompanyId();
-        List<Department> departments = departmentRepository.findByCompany_CompanyId(companyId);
+        int threshold = request.getThreshold();
 
-        List<DashboardRedisRepository.AvgCount> avgCounts = new ArrayList<>();
+        long totalMembers = members.size();
+        Double avgStress = members.isEmpty() ? null
+                : members.stream().mapToDouble(MemberDailyStressProjection::getAvgStress).average().orElse(0.0);
+        long highRiskCount = members.stream().filter(m -> m.getAvgStress() >= threshold).count();
 
-        boolean cacheMiss = false;
+        AttendanceRateProjection attendance = dashboardRepository.findAttendanceRate(companyId, date, attendanceStatuses);
+        Long consultationCount = dashboardRepository.countWaitingConsultations(companyId);
+        Long vacationCount = dashboardRepository.countPendingVacations(companyId);
 
-        for (Department dept : departments) {
-            Optional<DashboardRedisRepository.AvgCount> avgCount = dashboardRedisRepository.getDeptAvgCount(dept.getDepartmentId(), baseDate);
+        return DashboardDto.CompanyStats.of(avgStress, totalMembers, highRiskCount,
+                (attendance != null) ? attendance.getAttendanceRate() : 0.0, consultationCount, vacationCount);
+    }
 
-            if (avgCount.isEmpty()) {
-                cacheMiss = true;
-                break;
-            }
+    private List<DashboardDto.DepartmentStats> departmentStats(Long companyId, LocalDateTime startOfDay, LocalDateTime endOfDay, List<MemberDailyStressProjection> members) {
+        Map<Long, Long> cooldownByDept = dashboardRepository.findCooldownCountsByCompany(companyId, startOfDay, endOfDay).stream()
+                .collect(Collectors.toMap(DepartmentCooldownProjection::getDepartmentId, DepartmentCooldownProjection::getCooldownCount));
 
-            avgCounts.add(avgCount.get());
-        }
-        // Redis cache가 없을 경우
-        if (cacheMiss) {
-            List<DepartmentStatsProjection> projections = dashboardRepository.findDepartmentStats(companyId, baseDate, startOfDay, endOfDay);
-            return projections.stream()
-                    .map(DashboardDto.DepartmentStats::of)
-                    .toList();
-        }
-
-        List<DepartmentCooldownProjection> cooldownRows = dashboardRepository.findCooldownCountsByCompany(companyId, startOfDay, endOfDay);
-
-        Map<Long, Long> cooldownByDept = cooldownRows.stream()
-                .collect(Collectors.toMap(DepartmentCooldownProjection::getDepartmentId,
-                        DepartmentCooldownProjection::getCooldownCount));
+        Map<Long, List<MemberDailyStressProjection>> byDept = members.stream()
+                .collect(Collectors.groupingBy(MemberDailyStressProjection::getDepartmentId));
 
         List<DashboardDto.DepartmentStats> result = new ArrayList<>();
-
-        for (int i = 0; i < departments.size(); i++) {
-            Department dept = departments.get(i);
-            DashboardRedisRepository.AvgCount avgCount = avgCounts.get(i);
-            long cooldownCount = cooldownByDept.getOrDefault(dept.getDepartmentId(), 0L);
-            double avg = avgCount.avg();
+        for (Map.Entry<Long, List<MemberDailyStressProjection>> entry : byDept.entrySet()) {
+            List<MemberDailyStressProjection> deptMembers = entry.getValue();
+            double avg = deptMembers.stream().mapToDouble(MemberDailyStressProjection::getAvgStress).average().orElse(0.0);
 
             result.add(DashboardDto.DepartmentStats.builder()
-                    .departmentId(dept.getDepartmentId())
-                    .departmentName(dept.getDepartmentName())
-                    .avgStressLevel(avg).avgStressPercentage((double) DashboardDto.convertScore(avg))
-                    .memberCount(avgCount.count())
-                    .cooldownCount(cooldownCount)
+                    .departmentId(entry.getKey())
+                    .departmentName(deptMembers.get(0).getDepartmentName())
+                    .avgStressLevel(avg)
+                    .avgStressPercentage((double) DashboardDto.convertScore(avg))
+                    .memberCount((long) deptMembers.size())
+                    .cooldownCount(cooldownByDept.getOrDefault(entry.getKey(), 0L))
                     .build());
         }
         return result;
     }
 
-
-    public List<DashboardDto.HighRiskMember> getHighRiskMembers(DashboardDto.DashboardRequest request, LocalDate baseDate) {
-
-        Long companyId = request.getCompanyId();
-        double threshold = request.getThreshold();
-
-        Optional<Set<ZSetOperations.TypedTuple<String>>> topMembers = dashboardRedisRepository.getTopMembers(companyId, baseDate, threshold, TOP_HIGH_RISK_LIMIT);
-
-        // 예외 예방
-        if (topMembers.isEmpty()) {
-
-            Pageable top5 = PageRequest.of(0, TOP_HIGH_RISK_LIMIT);
-            List<HighRiskMemberProjection> highRiskMembers = dashboardRepository.findHighRiskMembers(companyId, baseDate, request.getThreshold(), top5);
-
-            return highRiskMembers
-                    .stream()
-                    .map(DashboardDto.HighRiskMember::of)
-                    .toList();
-        }
-
-        // 위험군 순위 정보 (Redis 조회 + MySQL 정보)
-        Set<ZSetOperations.TypedTuple<String>> tuples = topMembers.get();
-
-        if (tuples.isEmpty()) {
-            return List.of();
-        }
-
-        List<Long> orderedMemberIds = tuples
-                .stream()
-                .map(t -> Long.parseLong(t.getValue()))
+    private List<DashboardDto.HighRiskMember> highRiskMembers(List<MemberDailyStressProjection> members, int threshold) {
+        return members.stream()
+                .filter(m -> m.getAvgStress() >= threshold)
+                .sorted(Comparator.comparingDouble(MemberDailyStressProjection::getAvgStress).reversed())
+                .limit(TOP_HIGH_RISK_LIMIT)
+                .map(m -> DashboardDto.HighRiskMember.builder()
+                        .memberId(m.getMemberId())
+                        .memberName(m.getMemberName())
+                        .departmentName(m.getDepartmentName())
+                        .stressLevel(m.getAvgStress())
+                        .stressPercentage((double) DashboardDto.convertScore(m.getAvgStress()))
+                        .build())
                 .toList();
-
-        Map<Long, Double> scoreByMemberId = tuples
-                .stream()
-                .collect(Collectors.toMap(t -> Long.parseLong(t.getValue()), ZSetOperations.TypedTuple::getScore));
-
-        List<MemberProjection> details = dashboardRepository.findMemberBasicInfoByIds(orderedMemberIds);
-
-        Map<Long, MemberProjection> detailByMemberId = details.stream()
-                .collect(Collectors.toMap(MemberProjection::getMemberId, d -> d));
-
-        List<DashboardDto.HighRiskMember> result = orderedMemberIds.stream().map(memberId -> {
-            MemberProjection detail = detailByMemberId.get(memberId);
-            double stress = scoreByMemberId.get(memberId);
-
-            return DashboardDto.HighRiskMember
-                    .builder()
-                    .memberId(memberId)
-                    .memberName(detail != null ? detail.getMemberName() : null)
-                    .departmentName(detail != null ? detail.getDepartmentName() : null)
-                    .stressLevel(stress).stressPercentage((double) DashboardDto.convertScore(stress))
-                    .build();
-        }).toList();
-
-        return result;
     }
 
+    // ---- 인터페이스 메서드 (각자 멤버 집계를 한 번씩 조회) ----
 
+    @Override
     public DashboardDto.CompanyStats getCompanyStats(DashboardDto.DashboardRequest request, LocalDate baseDate) {
-        Long companyId = request.getCompanyId();
+        return companyStats(request, baseDate, memberStress(request.getCompanyId(), baseDate));
+    }
 
-        Optional<DashboardRedisRepository.AvgCount> avgCount = dashboardRedisRepository.getCompanyAvgCount(companyId, baseDate);
-        Optional<Long> highRiskCount = dashboardRedisRepository.getHighRiskCount(companyId, baseDate, request.getThreshold());
+    @Override
+    public List<DashboardDto.DepartmentStats> getDepartmentStats(DashboardDto.DashboardRequest request, LocalDate baseDate, LocalDateTime startOfDay, LocalDateTime endOfDay) {
+        return departmentStats(request.getCompanyId(), startOfDay, endOfDay, memberStress(request.getCompanyId(), baseDate));
+    }
 
-        Double avgStress;
-        Long totalMembers;
-        Long riskCount;
-
-        if (avgCount.isPresent() && highRiskCount.isPresent()) {
-            avgStress = avgCount.get().avg();
-            totalMembers = avgCount.get().count();
-            riskCount = highRiskCount.get();
-        } else {
-            CompanyStatsProjection todayStats = dashboardRepository.findCompanyStats(companyId, baseDate, request.getThreshold());
-            avgStress = todayStats.getAvgStressLevel();
-            totalMembers = todayStats.getTotalMembers();
-            riskCount = todayStats.getHighRiskCount();
-        }
-
-        AttendanceRateProjection todayAttendance = dashboardRepository.findAttendanceRate(companyId, baseDate, attendanceStatuses);
-
-        Long consultationCount = dashboardRepository.countWaitingConsultations(companyId);
-        Long vacationCount = dashboardRepository.countPendingVacations(companyId);
-
-        return DashboardDto.CompanyStats.of(avgStress, totalMembers, riskCount, (todayAttendance != null) ? todayAttendance.getAttendanceRate() : 0.0, consultationCount, vacationCount);
+    @Override
+    public List<DashboardDto.HighRiskMember> getHighRiskMembers(DashboardDto.DashboardRequest request, LocalDate baseDate) {
+        return highRiskMembers(memberStress(request.getCompanyId(), baseDate), request.getThreshold());
     }
 
     @Override
     public DashboardDto.DashboardResponse getRealtimeStats(DashboardDto.DashboardRequest request) {
-
         LocalDate baseDate = getBaseDate(request);
         LocalDateTime startOfDay = baseDate.atStartOfDay();
         LocalDateTime endOfDay = baseDate.atTime(23, 59, 59);
 
-        DashboardDto.CompanyStats companyStats = getCompanyStats(request, baseDate);
-        List<DashboardDto.DepartmentStats> departmentStats = getDepartmentStats(request, baseDate, startOfDay, endOfDay);
-        List<DashboardDto.HighRiskMember> highRiskMembers = getHighRiskMembers(request, baseDate);
+        List<MemberDailyStressProjection> members = memberStress(request.getCompanyId(), baseDate);
 
-        return DashboardDto.DashboardResponse.of(baseDate, companyStats, departmentStats, highRiskMembers);
+        return DashboardDto.DashboardResponse.of(baseDate,
+                companyStats(request, baseDate, members),
+                departmentStats(request.getCompanyId(), startOfDay, endOfDay, members),
+                highRiskMembers(members, request.getThreshold()));
     }
-
 
     @Override
     public DashboardDto.DashboardResponse getAllStats(DashboardDto.DashboardRequest request) {
+        Long companyId = request.getCompanyId();
+
         LocalDate baseDate = getBaseDate(request);
         LocalDateTime startOfDay = baseDate.atStartOfDay();
         LocalDateTime endOfDay = baseDate.atTime(23, 59, 59);
 
         LocalDate lastDate = attendanceRepository
-                .findLatestWorkDateBefore(request.getCompanyId(), baseDate)
+                .findLatestWorkDateBefore(companyId, baseDate)
                 .orElse(baseDate.minusDays(1));
 
         LocalDateTime startOfLastDay = lastDate.atStartOfDay();
         LocalDateTime endOfLastDay = lastDate.atTime(23, 59, 59);
 
-        DashboardDto.CompanyStats companyStats = getCompanyStats(request, baseDate);
-
-        List<DashboardDto.DepartmentStats> departmentStats =
-                getDepartmentStats(request, baseDate, startOfDay, endOfDay);
-
-        List<DashboardDto.HighRiskMember> highRiskMembers = getHighRiskMembers(request, baseDate);
-
-        DashboardDto.CompanyStats lastCompanyStats = getCompanyStats(request, lastDate);
-
-        List<DashboardDto.DepartmentStats> lastDepartmentStats =
-                getDepartmentStats(request, lastDate, startOfLastDay, endOfLastDay);
+        List<MemberDailyStressProjection> today = memberStress(companyId, baseDate);
+        List<MemberDailyStressProjection> last = memberStress(companyId, lastDate);
 
         return DashboardDto.DashboardResponse.of(
-                baseDate, companyStats, departmentStats, highRiskMembers,
-                lastDate, lastCompanyStats, lastDepartmentStats);
+                baseDate,
+                companyStats(request, baseDate, today),
+                departmentStats(companyId, startOfDay, endOfDay, today),
+                highRiskMembers(today, request.getThreshold()),
+                lastDate,
+                companyStats(request, lastDate, last),
+                departmentStats(companyId, startOfLastDay, endOfLastDay, last));
     }
-
-//    @Override
-//    public DashboardDto.DashboardResponse getYesterdayStats(DashboardDto.DashboardRequest request) {
-//
-//        LocalDate baseDate = getBaseDate(request);
-//        LocalDate lastDate = attendanceRepository.findLatestWorkDateBefore(request.getCompanyId(), baseDate).orElse(baseDate.minusDays(1));
-//        LocalDateTime startOfLastDay = lastDate.atStartOfDay();
-//        LocalDateTime endOfLastDay = lastDate.atTime(23, 59, 59);
-//
-//        DashboardDto.CompanyStats companyStats = getCompanyStats(request, lastDate);
-//        List<DashboardDto.DepartmentStats> departmentStats = getDepartmentStats(request, lastDate, startOfLastDay, endOfLastDay);
-//
-//        return DashboardDto.DashboardResponse.of(lastDate, companyStats, departmentStats, null);
-//    }
 }
-
